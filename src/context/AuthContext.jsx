@@ -104,9 +104,15 @@ export function AuthProvider({ children }) {
       async (_event, session) => {
         setSession(session);
         if (session?.user) {
-          await loadProfile(session.user);
+          // Only hydrate from DB if we don't already have a matching profile
+          // (prevents races with signInAsGuest's manual upsert).
+          setProfile(prev => {
+            if (prev && prev.id === session.user.id) return prev;
+            loadProfile(session.user);
+            return prev;
+          });
         } else {
-          setProfile(p => p?.is_guest ? p : null);
+          setProfile(null);
         }
         setAuthLoading(false);
       }
@@ -142,7 +148,7 @@ export function AuthProvider({ children }) {
       avatar_emoji: "🧙",
       photo_url:    null,
       email:        null,
-      is_guest:     false,
+      is_guest:     true,
     };
     const { data: upserted, error: upsertErr } = await supabase
       .from("ff_profiles")
@@ -205,7 +211,7 @@ export function AuthProvider({ children }) {
     return data.publicUrl;
   };
 
-  const isLoggedIn = !!session || profile?.is_guest;
+  const isLoggedIn = !!session || !!profile;
 
   return (
     <AuthContext.Provider value={{
